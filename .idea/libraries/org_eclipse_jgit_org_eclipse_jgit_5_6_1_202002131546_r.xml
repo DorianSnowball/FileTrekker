@@ -1,0 +1,26 @@
+<component name="libraryTable">
+  <library name="org.eclipse.jgit:org.eclipse.jgit:5.6.1.202002131546-r" type="repository">
+    <properties maven-id="org.eclipse.jgit:org.eclipse.jgit:5.6.1.202002131546-r" />
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/lib/org.eclipse.jgit-5.6.1.202002131546-r.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jsch-0.1.55.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jzlib-1.1.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/JavaEWAH-1.1.6.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/slf4j-api-1.7.2.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/bcpg-jdk15on-1.64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/bcprov-jdk15on-1.64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/bcpkix-jdk15on-1.64.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$PROJECT_DIR$/lib/org.eclipse.jgit-5.6.1.202002131546-r-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jsch-0.1.55-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jzlib-1.1.1-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/JavaEWAH-1.1.6-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/slf4j-api-1.7.2-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/bcpg-jdk15on-1.64-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/bcprov-jdk15on-1.64-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/bcpkix-jdk15on-1.64-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES />
+  </library>
+</component>
