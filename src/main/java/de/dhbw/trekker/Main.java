@@ -19,7 +19,6 @@ public class Main {
         options.addOption(mode);
 
         Option regex = new Option("r", "regex", true, "regex to search in files");
-        regex.setRequired(true);
         options.addOption(regex);
 
         Option linebreaks = new Option("l", "no-linebreaks", false, "Read files without linebreak");
@@ -58,7 +57,7 @@ public class Main {
         }
 
 
-        new Trekker(cmd.getOptionValue("directory"), trekkerMode , cmd.getOptionValue("regex"), cmd.hasOption("no-linebreaks"), n);
+        new Trekker(cmd.getOptionValue("directory"), trekkerMode , cmd.getOptionValue("regex", ""), cmd.hasOption("no-linebreaks"), n);
         // get path of repos directory -> required
         // get arguments like no-linebreaks
         // get regex -> required

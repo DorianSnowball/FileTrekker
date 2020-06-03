@@ -3,31 +3,22 @@ package de.dhbw.trekker;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
-import org.eclipse.jgit.diff.DiffFormatter;
-import org.eclipse.jgit.errors.CorruptObjectException;
-import org.eclipse.jgit.errors.IncorrectObjectTypeException;
-import org.eclipse.jgit.errors.MissingObjectException;
 import org.eclipse.jgit.lib.ObjectReader;
 import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.patch.FileHeader;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.AbstractTreeIterator;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.EmptyTreeIterator;
-import org.eclipse.jgit.treewalk.TreeWalk;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.NumberFormat;
-import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,21 +35,24 @@ public class Trekker {
         this.noLineBreaks = noLineBreaks;
 
         Stream<Path> allFiles = getAllFiles(directory);
-        HashMap<Path, List<String>> founds = new HashMap<>();
-        allFiles.forEach(path -> {
-            founds.put(path, findRegex(path));
-        });
-
 
         switch (trekkerMode) {
-            case COUNT -> countFiltersInSignatures(founds);
-            case COMBINATIONS -> countCombinations(founds, n);
-            case SIGNATURECHANGE -> countSignatureChanges(directory, founds.keySet());
+            case COUNT -> {
+                HashMap<Path, List<String>> founds = new HashMap<>();
+                allFiles.forEach(path -> founds.put(path, findRegex(path)));
+                countFiltersInSignatures(founds);
+            }
+            case COMBINATIONS -> {
+                HashMap<Path, List<String>> founds = new HashMap<>();
+                allFiles.forEach(path -> founds.put(path, findRegex(path)));
+                countCombinations(founds, n);
+            }
+            case SIGNATURECHANGE -> countSignatureChanges(directory, allFiles);
         }
 
     }
 
-    private void countSignatureChanges(String directory, Set<Path> files) {
+    private void countSignatureChanges(String directory, Stream<Path> files) {
 
         // Find and init the git repository
         FileRepositoryBuilder builder = new FileRepositoryBuilder();
@@ -87,9 +81,8 @@ public class Trekker {
         Path gitDirParent = repo.getDirectory().toPath().getParent();
 
         ArrayList<Path> relativePaths = new ArrayList<>();
-        for (Path path : files) {
-            relativePaths.add(gitDirParent.relativize(path));
-        }
+        files.forEach(path -> relativePaths.add(gitDirParent.relativize(path)));
+
         ArrayList<Path> unmodified = new ArrayList<>(relativePaths);
 
         StringBuilder stringBuilder = new StringBuilder("Signature;ID;Author;Message;FilesTouchedByCommit\n");
@@ -98,6 +91,7 @@ public class Trekker {
             stringBuilder.append(signatur.toString()).append("\n");
             // change path seperator from "\" to "/" so JGit can work with it
             try {
+                // Get all Commits for this file
                 Iterable<RevCommit> commits = git.log().addPath(signatur.toString().replace('\\', '/')).call();
                 int count = 0;
                 RevWalk revWalk = new RevWalk(repo);
@@ -107,6 +101,7 @@ public class Trekker {
                     try (ObjectReader reader = git.getRepository().newObjectReader()) {
                         commit = revWalk.parseCommit(commit.getId());
 
+                        // Get TreeIterators of the commit and his parent
                         AbstractTreeIterator newTree = new CanonicalTreeParser(null, reader, commit.getTree());
                         AbstractTreeIterator oldTree;
                         if (commit.getParentCount() != 0) {
@@ -117,17 +112,9 @@ public class Trekker {
                             oldTree = new EmptyTreeIterator();
                         }
 
-//                        try (DiffFormatter formatter = new DiffFormatter(OutputStream.nullOutputStream())) {
-//                            formatter.setRepository(repo);
-//                            List<DiffEntry> diffEntries = formatter.scan(oldTree, newTree);
-//                            for (DiffEntry diffEntry : diffEntries) {
-//                                FileHeader fileHeader = formatter.toFileHeader(diffEntry);
-//                                fileHeader.
-//                            }
-//                        }
-
                         ByteArrayOutputStream os = new ByteArrayOutputStream();
 
+                        // Create Diff between those two trees
                         List<DiffEntry> diffEntries = git.diff().setOldTree(oldTree).setNewTree(newTree).setOutputStream(os).call();
 
                         // Check for multiple files in diff
@@ -144,10 +131,8 @@ public class Trekker {
                             }
                         }
 
-
-
                         // Search for content in the diff
-                        String diff = os.toString();
+//                        String diff = os.toString();
 
                         stringBuilder.append(";").append(commit.getId().toString()).append(";")
                                 .append(commit.getAuthorIdent().getName()).append(";")
@@ -168,17 +153,12 @@ public class Trekker {
 //                            .append(time.toString().replace('Z', ' ').replace('T', ' ')).append(";")
 //                            .append(count).append("\n");
                 }
-//                stringBuilder.append(signatur).append(";").append(count).append("\n");
             } catch (GitAPIException e) {
                 e.printStackTrace();
             }
-//            stringBuilder.append("\n");
         }
 
         System.out.println(String.format("All Signatures;%d\nUnmodified Signatures;%d\n", relativePaths.size(), unmodified.size()));
-//        stringBuilder.append("\n\n")
-//                .append("All Signatures;").append(relativePaths.size()).append("\n")
-//                .append("Unmodified Signatures;").append(unmodified.size());
         System.out.println(stringBuilder.toString());
 
         git.close();
@@ -285,8 +265,7 @@ public class Trekker {
         // IWbemServices_ExecMethodAsync
 
         // Remove Duplicates
-        List<String> collect = Arrays.stream(split).distinct().collect(Collectors.toList());
-        return collect;
+        return Arrays.stream(split).distinct().collect(Collectors.toList());
 
     }
 
@@ -301,6 +280,6 @@ public class Trekker {
     }
 
     public enum Mode {
-        COUNT, COMBINATIONS, FILTERAGE, SIGNATURECHANGE;
+        COUNT, COMBINATIONS, FILTERAGE, SIGNATURECHANGE
     }
 }
