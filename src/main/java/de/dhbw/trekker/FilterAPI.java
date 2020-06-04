@@ -1,10 +1,14 @@
 package de.dhbw.trekker;
 
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 public class FilterAPI {
     private String name;
     private HashMap<String, Integer> combinations = new HashMap<>();
+    private List<Instant> occurrencesTime = new ArrayList<>();
     private int count;
 
     public FilterAPI(String name) {
@@ -31,4 +35,11 @@ public class FilterAPI {
         return combinations;
     }
 
+    public List<Instant> getOccurrencesTime() {
+        return occurrencesTime;
+    }
+
+    public void addOccurrenceTime(Instant time) {
+        occurrencesTime.add(time);
+    }
 }

@@ -12,13 +12,13 @@ import org.eclipse.jgit.treewalk.AbstractTreeIterator;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.EmptyTreeIterator;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.NumberFormat;
+import java.time.Instant;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -47,12 +47,12 @@ public class Trekker {
                 allFiles.forEach(path -> founds.put(path, findRegex(path)));
                 countCombinations(founds, n);
             }
-            case SIGNATURECHANGE -> countSignatureChanges(directory, allFiles);
+            case SIGNATURECHANGE, FILTERAGE -> analyseGitChanges(directory, allFiles, trekkerMode);
         }
 
     }
 
-    private void countSignatureChanges(String directory, Stream<Path> files) {
+    private void analyseGitChanges(String directory, Stream<Path> files, Mode trekkerMode) {
 
         // Find and init the git repository
         FileRepositoryBuilder builder = new FileRepositoryBuilder();
@@ -80,86 +80,125 @@ public class Trekker {
         // example: "..\repos\cuckoo-community\modules\signatures\" to "modules\signatures"
         Path gitDirParent = repo.getDirectory().toPath().getParent();
 
-        ArrayList<Path> relativePaths = new ArrayList<>();
-        files.forEach(path -> relativePaths.add(gitDirParent.relativize(path)));
+//        ArrayList<Path> relativeGitPaths = new ArrayList<>();
+        HashMap<Path, Path> gitReltoCWDRelMap = new HashMap<>();
+        files.forEach(path -> gitReltoCWDRelMap.put(gitDirParent.relativize(path), path));
 
-        ArrayList<Path> unmodified = new ArrayList<>(relativePaths);
 
-        StringBuilder stringBuilder = new StringBuilder("Signature;ID;Author;Message;FilesTouchedByCommit\n");
-        for (Path signatur : relativePaths) {
+        ArrayList<Path> unmodified = new ArrayList<>(gitReltoCWDRelMap.keySet());
 
-            stringBuilder.append(signatur.toString()).append("\n");
-            // change path seperator from "\" to "/" so JGit can work with it
+        StringBuilder stringBuilder = new StringBuilder();
+        if (trekkerMode.equals(Mode.SIGNATURECHANGE))
+            stringBuilder.append("Signature;ID;Author;Message;FilesTouchedByCommit\n");
+        if (trekkerMode.equals(Mode.FILTERAGE))
+            stringBuilder.append("Filter;Time\n");
+        HashMap<String, FilterAPI> apiMap = new HashMap<>();
+
+        for (Path signatur : gitReltoCWDRelMap.keySet()) {
+
+            // change path seperator from "\" (windows) to "/" (unix) so JGit can work with it
             try {
                 // Get all Commits for this file
                 Iterable<RevCommit> commits = git.log().addPath(signatur.toString().replace('\\', '/')).call();
                 int count = 0;
                 RevWalk revWalk = new RevWalk(repo);
+
+                Instant oldestCommit = Instant.now();
+                HashMap<Instant, List<List<String>>> filtersByCommitTime = new HashMap<>();
+
                 for (RevCommit commit : commits) {
                     count++;
-                    revWalk.reset();
-                    try (ObjectReader reader = git.getRepository().newObjectReader()) {
-                        commit = revWalk.parseCommit(commit.getId());
+//                    revWalk.reset();
 
-                        // Get TreeIterators of the commit and his parent
-                        AbstractTreeIterator newTree = new CanonicalTreeParser(null, reader, commit.getTree());
-                        AbstractTreeIterator oldTree;
-                        if (commit.getParentCount() != 0) {
-                            RevCommit parent = commit.getParent(0);
-                            parent = revWalk.parseCommit(parent.getId());
-                            oldTree = new CanonicalTreeParser(null, reader, parent.getTree());
-                        } else {
-                            oldTree = new EmptyTreeIterator();
-                        }
+                    if (trekkerMode.equals(Mode.SIGNATURECHANGE)) {
+                        try (ObjectReader reader = git.getRepository().newObjectReader()) {
+                            commit = revWalk.parseCommit(commit.getId());
 
-                        ByteArrayOutputStream os = new ByteArrayOutputStream();
-
-                        // Create Diff between those two trees
-                        List<DiffEntry> diffEntries = git.diff().setOldTree(oldTree).setNewTree(newTree).setOutputStream(os).call();
-
-                        // Check for multiple files in diff
-                        Set<String> filePaths = new HashSet<>();
-
-                        for (DiffEntry diffEntry : diffEntries) {
-                            filePaths.add(diffEntry.getNewPath());
-                        }
-
-                        // Remove signature from unmodified list if multiple commits per signature and commit only touches this signature
-                        if (count>1) {
-                            if (filePaths.size()==1) {
-                                unmodified.remove(signatur);
+                            // Get TreeIterators of the commit and his parent
+                            AbstractTreeIterator newTree = new CanonicalTreeParser(null, reader, commit.getTree());
+                            AbstractTreeIterator oldTree;
+                            if (commit.getParentCount() != 0) {
+                                RevCommit parent = commit.getParent(0);
+                                parent = revWalk.parseCommit(parent.getId());
+                                oldTree = new CanonicalTreeParser(null, reader, parent.getTree());
+                            } else {
+                                oldTree = new EmptyTreeIterator();
                             }
+
+                            // Create Diff between those two trees
+                            List<DiffEntry> diffEntries = git.diff().setContextLines(0).setOldTree(oldTree).setNewTree(newTree).call();
+
+                            // Check for multiple files in diff
+                            Set<String> filePaths = new HashSet<>();
+
+                            for (DiffEntry diffEntry : diffEntries) {
+                                filePaths.add(diffEntry.getNewPath());
+                            }
+
+                            // Remove signature from unmodified list if multiple commits per signature and commit only touches this signature
+                            if (count > 1) {
+                                if (filePaths.size() == 1) {
+                                    unmodified.remove(signatur);
+                                }
+                            }
+
+                            stringBuilder.append(";").append(commit.getId().toString()).append(";")
+                                    .append(commit.getAuthorIdent().getName()).append(";")
+                                    .append(commit.getShortMessage()).append(";")
+                                    .append(filePaths.size()).append(";")
+                                    .append(unmodified.contains(signatur)).append("\n");
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
 
-                        // Search for content in the diff
-//                        String diff = os.toString();
+                    } else if (trekkerMode.equals(Mode.FILTERAGE)) {
 
-                        stringBuilder.append(";").append(commit.getId().toString()).append(";")
-                                .append(commit.getAuthorIdent().getName()).append(";")
-                                .append(commit.getShortMessage()).append(";")
-                                .append(filePaths.size()).append(";")
-                                .append(unmodified.contains(signatur)).append("\n");
+                        Instant time = Instant.ofEpochSecond(commit.getCommitTime());
+                        if (time.isBefore(oldestCommit)) {
+                            oldestCommit = time;
+                        }
+                        List<List<String>> filtersBySignature = new ArrayList<>();
 
-                    } catch (IOException e) {
-                        e.printStackTrace();
+                        List<String> regex = findRegex(gitReltoCWDRelMap.get(signatur));
+                        for (String s : regex) {
+                            filtersBySignature.add(extraktFiltersFromString(s));
+                        }
+                        filtersByCommitTime.put(time, filtersBySignature);
                     }
-
-
-//                    Instant time = Instant.ofEpochSecond(commit.getCommitTime());
-//                    stringBuilder.append(signatur.toString()).append(";")
-//                            .append(commit.getId().toObjectId().toString()).append(";")
-//                            .append(commit.getAuthorIdent().getName()).append(";")
-//                            .append(commit.getShortMessage()).append(";")
-//                            .append(time.toString().replace('Z', ' ').replace('T', ' ')).append(";")
-//                            .append(count).append("\n");
                 }
+
+                if (trekkerMode.equals(Mode.FILTERAGE)) {
+
+                    List<List<String>> filtersBySignature = filtersByCommitTime.get(oldestCommit);
+                    Instant finalOldestCommit = oldestCommit;
+                    filtersBySignature.forEach(filters -> {
+                        filters.forEach(filter -> {
+                            FilterAPI filterAPI = apiMap.getOrDefault(filter, new FilterAPI(filter));
+                            filterAPI.addOccurrenceTime(finalOldestCommit);
+                            apiMap.put(filter, filterAPI);
+                        });
+                    });
+                }
+
             } catch (GitAPIException e) {
                 e.printStackTrace();
             }
         }
 
-        System.out.println(String.format("All Signatures;%d\nUnmodified Signatures;%d\n", relativePaths.size(), unmodified.size()));
-        System.out.println(stringBuilder.toString());
+        if (trekkerMode.equals(Mode.SIGNATURECHANGE)) {
+            System.out.println(String.format("All Signatures;%d\nUnmodified Signatures;%d\n", gitReltoCWDRelMap.size(), unmodified.size()));
+            System.out.println(stringBuilder.toString());
+        }
+
+        if (trekkerMode.equals(Mode.FILTERAGE)) {
+            apiMap.values().forEach(filterAPI -> {
+                filterAPI.getOccurrencesTime().forEach(
+                        instant -> stringBuilder.append(filterAPI.getName()).append(";")
+                                // Fix toString Format so MS Excel can read it as a date
+                                .append(instant.toString().replace('Z', ' ').replace('T', ' ')).append("\n"));
+            });
+            System.out.println(stringBuilder.toString());
+        }
 
         git.close();
 
