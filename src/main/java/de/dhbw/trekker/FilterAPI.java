@@ -35,7 +35,12 @@ public class FilterAPI {
         return combinations;
     }
 
+    /**
+     * Returns the sorted OccurrencesTimeList
+     * @return sorted OccurrencesTimeList
+     */
     public List<Instant> getOccurrencesTime() {
+        occurrencesTime.sort(Instant::compareTo);
         return occurrencesTime;
     }
 

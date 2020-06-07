@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.NumberFormat;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -192,10 +193,24 @@ public class Trekker {
 
         if (trekkerMode.equals(Mode.FILTERAGE)) {
             apiMap.values().forEach(filterAPI -> {
-                filterAPI.getOccurrencesTime().forEach(
-                        instant -> stringBuilder.append(filterAPI.getName()).append(";")
-                                // Fix toString Format so MS Excel can read it as a date
-                                .append(instant.toString().replace('Z', ' ').replace('T', ' ')).append("\n"));
+                List<Instant> occurrencesTime = filterAPI.getOccurrencesTime();
+                for (int i = 0; i < occurrencesTime.size(); i++) {
+                    Instant instant = occurrencesTime.get(i);
+
+                    // Get Time between commits
+                    Instant previous;
+                    if (i>0) {
+                        previous = occurrencesTime.get(i-1);
+                    } else {
+                        previous = instant;
+                    }
+
+                    Duration between = Duration.between(previous, instant);
+                    stringBuilder.append(filterAPI.getName()).append(";")
+                            // Fix toString Format so MS Excel can read it as a date
+                            .append(instant.toString().replace('Z', ' ').replace('T', ' ')).append(";")
+                            .append(between.toDays()).append("\n");
+                }
             });
             System.out.println(stringBuilder.toString());
         }
